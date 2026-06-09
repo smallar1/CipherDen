@@ -1,0 +1,98 @@
+# ===========================
+# CipherDen
+# ===========================
+
+# Vault files — never commit these
+*.db
+*.db-shm
+*.db-wal
+.cipherden/
+.keyden/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.Python
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.log
+
+# ===========================
+# Node / TypeScript
+# ===========================
+node_modules/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+.parcel-cache/
+.vite/
+
+# ===========================
+# Browser extension build output
+# ===========================
+extension/dist/
+extension/build/
+
+# ===========================
+# macOS
+# ===========================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# ===========================
+# Editors
+# ===========================
+
+# VSCode
+.vscode/
+!.vscode/extensions.json
+
+# JetBrains / PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# ===========================
+# Misc
+# ===========================
+*.pem
+*.key
+*.cert
+*.p12
+Thumbs.db
