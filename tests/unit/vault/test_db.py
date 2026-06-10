@@ -312,8 +312,11 @@ class TestVaultConfigSchema:
         assert row is not None
 
     def test_all_columns_present(self, conn: sqlite3.Connection) -> None:
-        expected = {"id", "salt_hex", "argon2_t", "argon2_m", "argon2_p"}
+        expected = {"id", "salt_hex", "argon2_t", "argon2_m", "argon2_p", "sentinel_enc"}
         assert set(self._col_map(conn).keys()) == expected
+
+    def test_sentinel_enc_is_blob(self, conn: sqlite3.Connection) -> None:
+        assert self._col_map(conn)["sentinel_enc"]["type"] == "BLOB"
 
     def test_id_is_primary_key(self, conn: sqlite3.Connection) -> None:
         assert self._col_map(conn)["id"]["pk"] is True
@@ -337,10 +340,11 @@ class TestVaultConfigConstraints:
     def _insert(self, conn: sqlite3.Connection, row_id: int = 1) -> None:
         conn.execute(
             """
-            INSERT INTO vault_config (id, salt_hex, argon2_t, argon2_m, argon2_p)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO vault_config
+                (id, salt_hex, argon2_t, argon2_m, argon2_p, sentinel_enc)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (row_id, "aa" * 32, 3, 65536, 4),
+            (row_id, "aa" * 32, 3, 65536, 4, b"\x00" * 28),
         )
         conn.commit()
 
