@@ -52,6 +52,12 @@ _MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        3,
+        """
+        ALTER TABLE vault_config ADD COLUMN sentinel_enc BLOB NOT NULL DEFAULT x'';
+        """,
+    ),
 ]
 
 

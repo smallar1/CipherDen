@@ -3,7 +3,8 @@ tests/unit/vault/test_init.py — Unit tests for vault initialisation.
 
 Tests cover:
 - vault_init creates the DB file and vault_config row
-- vault_init returns a 32-byte key
+- vault_init returns a 32-byte bytearray key
+- vault_init stores the sentinel ciphertext
 - vault_init is a no-op (raises) on an already-initialised vault
 - vault_config row contains correct Argon2 params
 - salt is stored as a 64-char hex string (32 bytes)
@@ -18,7 +19,14 @@ from pathlib import Path
 
 import pytest
 
-from cipherden.vault.crypto import ARGON2_M, ARGON2_P, ARGON2_T, derive_key
+from cipherden.vault.crypto import (
+    ARGON2_M,
+    ARGON2_P,
+    ARGON2_T,
+    SENTINEL_PLAINTEXT,
+    decrypt,
+    derive_key,
+)
 from cipherden.vault.db import open_db
 from cipherden.vault.init import VaultAlreadyExistsError, is_initialised, vault_init
 
@@ -36,7 +44,7 @@ def vault_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def initialised_vault(vault_path: Path) -> tuple[Path, bytes]:
+def initialised_vault(vault_path: Path) -> tuple[Path, bytearray]:
     key = vault_init(PASSWORD, vault_path=vault_path)
     return vault_path, key
 
@@ -47,9 +55,9 @@ def initialised_vault(vault_path: Path) -> tuple[Path, bytes]:
 
 
 class TestVaultInit:
-    def test_returns_bytes(self, vault_path: Path) -> None:
+    def test_returns_bytearray(self, vault_path: Path) -> None:
         key = vault_init(PASSWORD, vault_path=vault_path)
-        assert isinstance(key, bytes)
+        assert isinstance(key, bytearray)
 
     def test_returns_32_byte_key(self, vault_path: Path) -> None:
         key = vault_init(PASSWORD, vault_path=vault_path)
@@ -85,7 +93,7 @@ class TestVaultInit:
         conn = open_db(vault_path)
         row = conn.execute("SELECT salt_hex FROM vault_config").fetchone()
         conn.close()
-        assert len(row["salt_hex"]) == 64  # 32 bytes * 2 hex chars
+        assert len(row["salt_hex"]) == 64
 
     def test_salt_hex_is_valid_hex(self, vault_path: Path) -> None:
         vault_init(PASSWORD, vault_path=vault_path)
@@ -102,6 +110,23 @@ class TestVaultInit:
         assert row["argon2_t"] == ARGON2_T
         assert row["argon2_m"] == ARGON2_M
         assert row["argon2_p"] == ARGON2_P
+
+    def test_sentinel_enc_stored_as_blob(self, vault_path: Path) -> None:
+        vault_init(PASSWORD, vault_path=vault_path)
+        conn = open_db(vault_path)
+        row = conn.execute("SELECT sentinel_enc FROM vault_config").fetchone()
+        conn.close()
+        assert isinstance(row["sentinel_enc"], bytes)
+        assert len(row["sentinel_enc"]) > 0
+
+    def test_sentinel_decrypts_to_known_plaintext(self, vault_path: Path) -> None:
+        key = vault_init(PASSWORD, vault_path=vault_path)
+        conn = open_db(vault_path)
+        row = conn.execute(
+            "SELECT salt_hex, argon2_t, argon2_m, argon2_p, sentinel_enc FROM vault_config"
+        ).fetchone()
+        conn.close()
+        assert decrypt(key, bytes(row["sentinel_enc"])) == SENTINEL_PLAINTEXT
 
     def test_returned_key_matches_rederivation(self, vault_path: Path) -> None:
         key = vault_init(PASSWORD, vault_path=vault_path)
@@ -163,7 +188,6 @@ class TestIsInitialised:
         assert is_initialised(vault_path=vault_path) is False
 
     def test_returns_false_on_empty_db(self, vault_path: Path) -> None:
-        # DB exists but vault_init was never called.
         conn = open_db(vault_path)
         conn.close()
         assert is_initialised(vault_path=vault_path) is False
