@@ -28,9 +28,8 @@ jobs:
       - name: Check formatting with ruff
         run: ruff format --check .
 
-      - name: Run tests with pytest
-        # Exit code 5 = no tests collected; tolerate it until tests exist.
-        run: pytest || [ $? = 5 ]
+      - name: Run tests with coverage
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=85
 
   typescript:
     name: TypeScript (vitest)
