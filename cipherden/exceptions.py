@@ -29,3 +29,7 @@ class DecryptionError(CipherDenError):
 
     Never log or expose the raw ciphertext or key material in the message.
     """
+
+
+class NotFoundError(CipherDenError):
+    """Raised when a requested vault entry does not exist."""
