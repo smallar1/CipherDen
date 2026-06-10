@@ -5,14 +5,15 @@ Tests cover:
 - Salt generation (length, randomness)
 - Key derivation (output length, type, determinism, sensitivity to inputs)
 - AES-256-GCM encrypt/decrypt (round-trip, nonce prepended, wrong key raises)
+- AAD binding (correct AAD decrypts, wrong/missing AAD raises DecryptionError)
 - Parameter defaults match spec
 """
 
 from __future__ import annotations
 
 import pytest
-from cryptography.exceptions import InvalidTag
 
+from cipherden.exceptions import DecryptionError
 from cipherden.vault.crypto import (
     ARGON2_HASH_LEN,
     ARGON2_M,
@@ -28,6 +29,7 @@ from cipherden.vault.crypto import (
 )
 
 _PASSWORD = "correct-horse-battery-staple"  # pragma: allowlist secret
+_AAD = b"vault-uuid-1234:password"
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +163,11 @@ class TestEncryptDecrypt:
         key = self._key()
         assert decrypt(key, encrypt(key, SENTINEL_PLAINTEXT)) == SENTINEL_PLAINTEXT
 
-    def test_wrong_key_raises_invalid_tag(self) -> None:
+    def test_wrong_key_raises_decryption_error(self) -> None:
         key1 = self._key()
         key2 = self._key()
         ciphertext = encrypt(key1, b"secret")
-        with pytest.raises(InvalidTag):
+        with pytest.raises(DecryptionError):
             decrypt(key2, ciphertext)
 
     def test_truncated_ciphertext_raises_value_error(self) -> None:
@@ -173,9 +175,57 @@ class TestEncryptDecrypt:
         with pytest.raises(ValueError):
             decrypt(key, b"\x00" * 4)  # shorter than NONCE_BYTES
 
-    def test_tampered_ciphertext_raises_invalid_tag(self) -> None:
+    def test_tampered_ciphertext_raises_decryption_error(self) -> None:
         key = self._key()
         ciphertext = bytearray(encrypt(key, b"secret"))
-        ciphertext[-1] ^= 0xFF  # flip last byte
-        with pytest.raises(InvalidTag):
+        ciphertext[-1] ^= 0xFF  # flip last byte of GCM tag
+        with pytest.raises(DecryptionError):
             decrypt(key, bytes(ciphertext))
+
+
+# ---------------------------------------------------------------------------
+# AAD (associated data)
+# ---------------------------------------------------------------------------
+
+
+class TestAAD:
+    def _key(self) -> bytearray:
+        return derive_key(_PASSWORD, generate_salt(), t=1, m=8192, p=1)
+
+    def test_round_trip_with_aad(self) -> None:
+        key = self._key()
+        plaintext = b"hunter2"  # pragma: allowlist secret
+        blob = encrypt(key, plaintext, aad=_AAD)
+        assert decrypt(key, blob, aad=_AAD) == plaintext
+
+    def test_wrong_aad_raises_decryption_error(self) -> None:
+        key = self._key()
+        blob = encrypt(key, b"secret", aad=_AAD)
+        with pytest.raises(DecryptionError):
+            decrypt(key, blob, aad=b"vault-uuid-1234:username")
+
+    def test_missing_aad_on_decrypt_raises_decryption_error(self) -> None:
+        key = self._key()
+        blob = encrypt(key, b"secret", aad=_AAD)
+        with pytest.raises(DecryptionError):
+            decrypt(key, blob)  # aad defaults to None
+
+    def test_unexpected_aad_on_decrypt_raises_decryption_error(self) -> None:
+        key = self._key()
+        blob = encrypt(key, b"secret")  # no AAD at encrypt time
+        with pytest.raises(DecryptionError):
+            decrypt(key, blob, aad=_AAD)
+
+    def test_aad_does_not_affect_ciphertext_length(self) -> None:
+        key = self._key()
+        plaintext = b"hello"
+        without_aad = encrypt(key, plaintext)
+        with_aad = encrypt(key, plaintext, aad=_AAD)
+        assert len(without_aad) == len(with_aad)
+
+    def test_different_aad_values_produce_same_length_output(self) -> None:
+        key = self._key()
+        plaintext = b"hello"
+        blob1 = encrypt(key, plaintext, aad=b"vault-1:password")
+        blob2 = encrypt(key, plaintext, aad=b"vault-2:password")
+        assert len(blob1) == len(blob2)

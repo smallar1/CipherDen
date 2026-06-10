@@ -21,8 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cryptography.exceptions import InvalidTag
-
+from cipherden.exceptions import DecryptionError
 from cipherden.vault.crypto import (
     SENTINEL_PLAINTEXT,
     decrypt,
@@ -100,7 +99,7 @@ class VaultSession:
 
         try:
             plaintext = decrypt(key, bytes(row["sentinel_enc"]))
-        except InvalidTag, ValueError:
+        except DecryptionError, ValueError:
             # Zero the key immediately — wrong password, discard it.
             for i in range(len(key)):
                 key[i] = 0
