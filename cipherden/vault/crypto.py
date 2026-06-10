@@ -13,7 +13,10 @@ from __future__ import annotations
 import os
 
 from argon2.low_level import Type, hash_secret_raw
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from cipherden.exceptions import DecryptionError
 
 # ---------------------------------------------------------------------------
 # Argon2id parameters
@@ -73,27 +76,40 @@ def derive_key(
     return bytearray(raw)
 
 
-def encrypt(key: bytearray, plaintext: bytes) -> bytes:
+def encrypt(
+    key: bytearray,
+    plaintext: bytes,
+    aad: bytes | None = None,
+) -> bytes:
     """
     Encrypt *plaintext* with AES-256-GCM using *key*.
 
-    A random 12-byte nonce is prepended to the ciphertext in the output.
+    A random 12-byte nonce is generated per call and prepended to the output.
     Output format: nonce (12 bytes) || ciphertext+tag (len(plaintext) + 16 bytes)
 
     Args:
         key:       32-byte key from derive_key().
         plaintext: Arbitrary bytes to encrypt.
+        aad:       Optional associated data bound to this ciphertext.
+                   Must be supplied to decrypt() unchanged or decryption will
+                   fail. The vault layer is responsible for constructing AAD
+                   as ``f"{vault_id}:{field_name}".encode()``.
+                   Pass None for non-field encryptions (e.g. the sentinel).
 
     Returns:
         nonce + ciphertext as bytes. Safe to store in the database.
     """
     nonce = os.urandom(NONCE_BYTES)
     aesgcm = AESGCM(bytes(key))
-    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, aad)
     return nonce + ciphertext
 
 
-def decrypt(key: bytearray, ciphertext: bytes) -> bytes:
+def decrypt(
+    key: bytearray,
+    ciphertext: bytes,
+    aad: bytes | None = None,
+) -> bytes:
     """
     Decrypt AES-256-GCM *ciphertext* with *key*.
 
@@ -102,13 +118,17 @@ def decrypt(key: bytearray, ciphertext: bytes) -> bytes:
     Args:
         key:        32-byte key from derive_key().
         ciphertext: nonce + ciphertext bytes as stored in the database.
+        aad:        Associated data supplied to encrypt(). Must match exactly
+                    or decryption will raise DecryptionError.
+                    Pass None if no AAD was used during encryption.
 
     Returns:
         Decrypted plaintext bytes.
 
     Raises:
-        cryptography.exceptions.InvalidTag: If the key is wrong or data is corrupt.
-        ValueError: If ciphertext is too short to contain a nonce.
+        DecryptionError: If the authentication tag does not verify — wrong key,
+                         corrupt data, tampered ciphertext, or mismatched AAD.
+        ValueError:      If ciphertext is too short to contain a nonce.
     """
     if len(ciphertext) < NONCE_BYTES:
         msg = f"Ciphertext too short: expected at least {NONCE_BYTES} bytes, got {len(ciphertext)}"
@@ -116,4 +136,7 @@ def decrypt(key: bytearray, ciphertext: bytes) -> bytes:
     nonce = ciphertext[:NONCE_BYTES]
     data = ciphertext[NONCE_BYTES:]
     aesgcm = AESGCM(bytes(key))
-    return aesgcm.decrypt(nonce, data, None)
+    try:
+        return aesgcm.decrypt(nonce, data, aad)
+    except InvalidTag as exc:
+        raise DecryptionError("Decryption failed: authentication tag mismatch") from exc
