@@ -25,19 +25,30 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+def _prompt_password() -> str:
+    """Prompt for a master password, re-prompting until it meets requirements."""
+    while True:
+        password = typer.prompt("Master password", hide_input=True)
+        if len(password) < 12:
+            err_console.print("[red]Error:[/red] Master password must be at least 12 characters.")
+            continue
+        return password
+
+
+def _prompt_confirm(password: str) -> None:
+    """Prompt for password confirmation, re-prompting until it matches."""
+    while True:
+        confirm = typer.prompt("Confirm master password", hide_input=True)
+        if confirm == password:
+            return
+        err_console.print("[red]Error:[/red] Passwords do not match. Try again.")
+
+
 @vault_app.command("init")
 def cmd_vault_init() -> None:
     """Initialise a new encrypted vault."""
-    password = typer.prompt("Master password", hide_input=True)
-    confirm = typer.prompt("Confirm master password", hide_input=True)
-
-    if password != confirm:
-        err_console.print("[red]Error:[/red] Passwords do not match.")
-        raise typer.Exit(code=1)
-
-    if len(password) < 12:
-        err_console.print("[red]Error:[/red] Master password must be at least 12 characters.")
-        raise typer.Exit(code=1)
+    password = _prompt_password()
+    _prompt_confirm(password)
 
     try:
         vault_init(password)
