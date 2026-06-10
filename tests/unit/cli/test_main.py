@@ -1,9 +1,8 @@
 """
 tests/unit/cli/test_main.py — Unit tests for the CLI vault init command.
 
-Uses Typer's CliRunner to invoke commands in-process without spawning
-a subprocess. The actual vault_init function is mocked to isolate CLI
-logic from vault logic (which is tested in test_init.py).
+Uses Typer's CliRunner to invoke commands in-process.
+vault_init is mocked to isolate CLI logic from vault logic.
 """
 
 from __future__ import annotations
@@ -18,9 +17,8 @@ from cipherden.vault.init import VaultAlreadyExistsError
 runner = CliRunner()
 
 _PASSWORD = "correct-horse-battery-staple"  # pragma: allowlist secret
+_SHORT = "short"
 _CONFIRM = f"{_PASSWORD}\n{_PASSWORD}\n"
-_MISMATCH = f"{_PASSWORD}\ndifferent-password-xyz\n"
-_SHORT = "short\nshort\n"
 
 
 # ---------------------------------------------------------------------------
@@ -51,47 +49,55 @@ class TestVaultInitCommand:
 
 
 # ---------------------------------------------------------------------------
-# vault init — password mismatch
-# ---------------------------------------------------------------------------
-
-
-class TestVaultInitPasswordMismatch:
-    def test_exits_1_on_mismatch(self) -> None:
-        with patch("cipherden.cli.main.vault_init"):
-            result = runner.invoke(app, ["vault", "init"], input=_MISMATCH)
-        assert result.exit_code == 1
-
-    def test_vault_init_not_called_on_mismatch(self) -> None:
-        with patch("cipherden.cli.main.vault_init") as mock:
-            runner.invoke(app, ["vault", "init"], input=_MISMATCH)
-        mock.assert_not_called()
-
-    def test_error_message_shown_on_mismatch(self) -> None:
-        with patch("cipherden.cli.main.vault_init"):
-            result = runner.invoke(app, ["vault", "init"], input=_MISMATCH)
-        assert "do not match" in result.output.lower()
-
-
-# ---------------------------------------------------------------------------
-# vault init — password too short
+# vault init — short password re-prompts then succeeds
 # ---------------------------------------------------------------------------
 
 
 class TestVaultInitPasswordTooShort:
-    def test_exits_1_on_short_password(self) -> None:
-        with patch("cipherden.cli.main.vault_init"):
-            result = runner.invoke(app, ["vault", "init"], input=_SHORT)
-        assert result.exit_code == 1
-
-    def test_vault_init_not_called_on_short_password(self) -> None:
-        with patch("cipherden.cli.main.vault_init") as mock:
-            runner.invoke(app, ["vault", "init"], input=_SHORT)
-        mock.assert_not_called()
-
-    def test_error_message_shown_on_short_password(self) -> None:
-        with patch("cipherden.cli.main.vault_init"):
-            result = runner.invoke(app, ["vault", "init"], input=_SHORT)
+    def test_short_password_shows_error(self) -> None:
+        # First attempt too short, second attempt valid with confirmation.
+        input_seq = f"{_SHORT}\n{_PASSWORD}\n{_PASSWORD}\n"
+        with patch("cipherden.cli.main.vault_init", return_value=b"\x00" * 32):
+            result = runner.invoke(app, ["vault", "init"], input=input_seq)
         assert "12 characters" in result.output
+
+    def test_succeeds_after_short_then_valid_password(self) -> None:
+        input_seq = f"{_SHORT}\n{_PASSWORD}\n{_PASSWORD}\n"
+        with patch("cipherden.cli.main.vault_init", return_value=b"\x00" * 32):
+            result = runner.invoke(app, ["vault", "init"], input=input_seq)
+        assert result.exit_code == 0
+
+    def test_vault_init_not_called_until_valid_password(self) -> None:
+        input_seq = f"{_SHORT}\n{_PASSWORD}\n{_PASSWORD}\n"
+        with patch("cipherden.cli.main.vault_init", return_value=b"\x00" * 32) as mock:
+            runner.invoke(app, ["vault", "init"], input=input_seq)
+        mock.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# vault init — confirmation mismatch re-prompts then succeeds
+# ---------------------------------------------------------------------------
+
+
+class TestVaultInitPasswordMismatch:
+    def test_mismatch_shows_error(self) -> None:
+        # First confirmation wrong, second correct.
+        input_seq = f"{_PASSWORD}\ndifferent-password-xyz\n{_PASSWORD}\n"
+        with patch("cipherden.cli.main.vault_init", return_value=b"\x00" * 32):
+            result = runner.invoke(app, ["vault", "init"], input=input_seq)
+        assert "do not match" in result.output.lower()
+
+    def test_succeeds_after_mismatch_then_correct_confirm(self) -> None:
+        input_seq = f"{_PASSWORD}\ndifferent-password-xyz\n{_PASSWORD}\n"
+        with patch("cipherden.cli.main.vault_init", return_value=b"\x00" * 32):
+            result = runner.invoke(app, ["vault", "init"], input=input_seq)
+        assert result.exit_code == 0
+
+    def test_vault_init_called_once_after_mismatch_retry(self) -> None:
+        input_seq = f"{_PASSWORD}\ndifferent-password-xyz\n{_PASSWORD}\n"
+        with patch("cipherden.cli.main.vault_init", return_value=b"\x00" * 32) as mock:
+            runner.invoke(app, ["vault", "init"], input=input_seq)
+        mock.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
