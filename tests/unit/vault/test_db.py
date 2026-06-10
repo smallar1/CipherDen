@@ -61,7 +61,7 @@ class TestGetSchemaVersion:
         assert _get_schema_version(bare_conn) == -1
 
     def test_returns_correct_version_after_migration(self, conn: sqlite3.Connection) -> None:
-        assert _get_schema_version(conn) == 1
+        assert _get_schema_version(conn) == len(_MIGRATIONS)
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ class TestRunMigrations:
         """Calling run_migrations a second time must be a no-op."""
         run_migrations(conn)
         run_migrations(conn)
-        assert _get_schema_version(conn) == 1
+        assert _get_schema_version(conn) == len(_MIGRATIONS)
 
     def test_version_matches_migration_count(self, conn: sqlite3.Connection) -> None:
         assert _get_schema_version(conn) == len(_MIGRATIONS)
@@ -216,10 +216,10 @@ class TestEntriesConstraints:
         defaults.update(overrides)
         conn.execute(
             """
-            INSERT INTO entries (
-                id, title, username, password_enc, url, notes, created_at, updated_at
-            )
-            VALUES (:id, :title, :username, :password_enc, :url, :notes, :created_at, :updated_at)
+            INSERT INTO entries
+                (id, title, username, password_enc, url, notes, created_at, updated_at)
+            VALUES
+                (:id, :title, :username, :password_enc, :url, :notes, :created_at, :updated_at)
             """,
             defaults,
         )
@@ -286,3 +286,76 @@ class TestEntriesConstraints:
             "SELECT username FROM entries WHERE id = ?", ("00000000-0000-0000-0000-000000000002",)
         ).fetchone()
         assert row["username"] == ""
+
+
+# ---------------------------------------------------------------------------
+# vault_config table — schema correctness
+# ---------------------------------------------------------------------------
+
+
+class TestVaultConfigSchema:
+    def _col_map(self, conn: sqlite3.Connection) -> dict:
+        rows = conn.execute("PRAGMA table_info(vault_config)").fetchall()
+        return {
+            r["name"]: {
+                "type": r["type"],
+                "notnull": bool(r["notnull"]),
+                "pk": bool(r["pk"]),
+            }
+            for r in rows
+        }
+
+    def test_vault_config_table_exists(self, conn: sqlite3.Connection) -> None:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='vault_config'"
+        ).fetchone()
+        assert row is not None
+
+    def test_all_columns_present(self, conn: sqlite3.Connection) -> None:
+        expected = {"id", "salt_hex", "argon2_t", "argon2_m", "argon2_p"}
+        assert set(self._col_map(conn).keys()) == expected
+
+    def test_id_is_primary_key(self, conn: sqlite3.Connection) -> None:
+        assert self._col_map(conn)["id"]["pk"] is True
+
+    def test_salt_hex_not_null(self, conn: sqlite3.Connection) -> None:
+        assert self._col_map(conn)["salt_hex"]["notnull"] is True
+
+    def test_argon2_params_not_null(self, conn: sqlite3.Connection) -> None:
+        cols = self._col_map(conn)
+        assert cols["argon2_t"]["notnull"] is True
+        assert cols["argon2_m"]["notnull"] is True
+        assert cols["argon2_p"]["notnull"] is True
+
+
+# ---------------------------------------------------------------------------
+# vault_config table — single-row constraint
+# ---------------------------------------------------------------------------
+
+
+class TestVaultConfigConstraints:
+    def _insert(self, conn: sqlite3.Connection, row_id: int = 1) -> None:
+        conn.execute(
+            """
+            INSERT INTO vault_config (id, salt_hex, argon2_t, argon2_m, argon2_p)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (row_id, "aa" * 32, 3, 65536, 4),
+        )
+        conn.commit()
+
+    def test_valid_insert_succeeds(self, conn: sqlite3.Connection) -> None:
+        self._insert(conn)
+        row = conn.execute("SELECT id FROM vault_config").fetchone()
+        assert row["id"] == 1
+
+    def test_second_row_with_different_id_raises(self, conn: sqlite3.Connection) -> None:
+        """CHECK (id = 1) must reject any row where id != 1."""
+        self._insert(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            self._insert(conn, row_id=2)
+
+    def test_duplicate_id_raises(self, conn: sqlite3.Connection) -> None:
+        self._insert(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            self._insert(conn, row_id=1)
