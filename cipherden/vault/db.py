@@ -33,15 +33,25 @@ _MIGRATIONS: list[tuple[int, str]] = [
             password_enc BLOB    NOT NULL,              -- AES-GCM ciphertext bytes
             url          TEXT             DEFAULT NULL,
             notes        TEXT             DEFAULT NULL,
-            created_at   TEXT    NOT NULL,              -- ISO 8601 UTC, e.g. 2025-01-01T00:00:00Z
+            created_at   TEXT    NOT NULL,              -- ISO 8601 UTC e.g. 2025-01-01T00:00:00Z
             updated_at   TEXT    NOT NULL               -- ISO 8601 UTC, updated on every write
         );
 
         CREATE INDEX IF NOT EXISTS idx_entries_title ON entries (title);
         """,
     ),
-    # Future migrations go here:
-    # (2, "ALTER TABLE entries ADD COLUMN ..."),
+    (
+        2,
+        """
+        CREATE TABLE IF NOT EXISTS vault_config (
+            id          INTEGER PRIMARY KEY CHECK (id = 1),  -- enforces single row
+            salt_hex    TEXT    NOT NULL,                    -- 32-byte Argon2id salt, hex-encoded
+            argon2_t    INTEGER NOT NULL,                    -- time cost
+            argon2_m    INTEGER NOT NULL,                    -- memory cost (KiB)
+            argon2_p    INTEGER NOT NULL                     -- parallelism
+        );
+        """,
+    ),
 ]
 
 
