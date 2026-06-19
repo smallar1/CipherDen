@@ -99,7 +99,7 @@ class VaultSession:
 
         try:
             plaintext = decrypt(key, bytes(row["sentinel_enc"]))
-        except DecryptionError, ValueError:
+        except (DecryptionError, ValueError):
             # Zero the key immediately — wrong password, discard it.
             for i in range(len(key)):
                 key[i] = 0

@@ -1,8 +1,9 @@
 """
-tests/unit/cli/test_main.py — Unit tests for the CLI vault init, add, and get commands.
+tests/unit/cli/test_main.py — Unit tests for the CLI vault init, add, get, list, and
+search commands.
 
 Uses Typer's CliRunner to invoke commands in-process.
-vault_init / add_entry / get_entries_by_title / list_entries / VaultSession are
+vault_init / add_entry / get_entry / list_entries / search_entries / VaultSession are
 mocked to isolate CLI logic from vault logic.
 """
 
@@ -13,6 +14,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from cipherden.cli.main import app
+from cipherden.exceptions import NotFoundError
 from cipherden.vault.init import VaultAlreadyExistsError
 from cipherden.vault.models import EntryRead
 from cipherden.vault.session import VaultNotInitialisedError, WrongPasswordError
@@ -249,115 +251,57 @@ class TestAddCommandSessionErrors:
 
 
 # ---------------------------------------------------------------------------
-# get <title> — happy path
+# get <id> — happy path
 # ---------------------------------------------------------------------------
 
 
-class TestGetByTitleCommand:
+class TestGetByIdCommand:
     def test_successful_get_exits_0(self) -> None:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]),
+            patch("cipherden.cli.main.get_entry", return_value=_ENTRY),
         ):
             mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
+            result = runner.invoke(app, ["get", _ENTRY.id], input=f"{_PASSWORD}\n")
         assert result.exit_code == 0
 
-    def test_get_prints_decrypted_password(self) -> None:
+    def test_get_masks_password_by_default(self) -> None:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]),
+            patch("cipherden.cli.main.get_entry", return_value=_ENTRY),
         ):
             mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
-        assert _ENTRY.password in result.output
+            result = runner.invoke(app, ["get", _ENTRY.id], input=f"{_PASSWORD}\n")
+        assert _ENTRY.password not in result.output
+        assert "********" in result.output
         assert _ENTRY.title in result.output
 
-    def test_get_entries_by_title_called_with_correct_title(self) -> None:
+    def test_get_with_reveal_shows_password(self) -> None:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]) as mock_get,
+            patch("cipherden.cli.main.get_entry", return_value=_ENTRY),
         ):
             mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
-        assert mock_get.call_args[0][1] == _ENTRY.title
+            result = runner.invoke(app, ["get", _ENTRY.id, "--reveal"], input=f"{_PASSWORD}\n")
+        assert _ENTRY.password in result.output
+
+    def test_get_entry_called_with_correct_id(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.get_entry", return_value=_ENTRY) as mock_get,
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            runner.invoke(app, ["get", _ENTRY.id], input=f"{_PASSWORD}\n")
+        assert mock_get.call_args[0][1] == _ENTRY.id
 
     def test_get_locks_session_afterwards(self) -> None:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]),
+            patch("cipherden.cli.main.get_entry", return_value=_ENTRY),
         ):
             mock_session = _mock_unlocked_session()
             mock_session_cls.unlock.return_value = mock_session
-            runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
-        mock_session.lock.assert_called_once()
-
-    def test_multiple_matches_prints_all(self) -> None:
-        other = _ENTRY.model_copy(update={"id": "22222222-2222-2222-2222-222222222222"})
-        with (
-            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY, other]),
-        ):
-            mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
-        assert result.output.count(_ENTRY.title) == 2
-
-
-# ---------------------------------------------------------------------------
-# get all — happy path
-# ---------------------------------------------------------------------------
-
-
-class TestGetAllCommand:
-    def test_successful_get_all_exits_0(self) -> None:
-        with (
-            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY]),
-        ):
-            mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", "all"], input=f"{_PASSWORD}\n")
-        assert result.exit_code == 0
-
-    def test_get_all_is_case_insensitive(self) -> None:
-        with (
-            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY]) as mock_list,
-        ):
-            mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            runner.invoke(app, ["get", "ALL"], input=f"{_PASSWORD}\n")
-        mock_list.assert_called_once()
-
-    def test_get_all_prints_every_entry(self) -> None:
-        other = _ENTRY.model_copy(
-            update={"id": "22222222-2222-2222-2222-222222222222", "title": "GitLab"}
-        )
-        with (
-            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY, other]),
-        ):
-            mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", "all"], input=f"{_PASSWORD}\n")
-        assert _ENTRY.title in result.output
-        assert other.title in result.output
-
-    def test_get_all_on_empty_vault_exits_0(self) -> None:
-        with (
-            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.list_entries", return_value=[]),
-        ):
-            mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", "all"], input=f"{_PASSWORD}\n")
-        assert result.exit_code == 0
-        assert "empty" in result.output.lower()
-
-    def test_get_all_locks_session_afterwards(self) -> None:
-        with (
-            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY]),
-        ):
-            mock_session = _mock_unlocked_session()
-            mock_session_cls.unlock.return_value = mock_session
-            runner.invoke(app, ["get", "all"], input=f"{_PASSWORD}\n")
+            runner.invoke(app, ["get", _ENTRY.id], input=f"{_PASSWORD}\n")
         mock_session.lock.assert_called_once()
 
 
@@ -370,24 +314,129 @@ class TestGetCommandErrors:
     def test_not_found_exits_1(self) -> None:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[]),
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
         ):
             mock_session_cls.unlock.return_value = _mock_unlocked_session()
-            result = runner.invoke(app, ["get", "Nonexistent"], input=f"{_PASSWORD}\n")
+            result = runner.invoke(app, ["get", "nonexistent-id"], input=f"{_PASSWORD}\n")
         assert result.exit_code == 1
 
     def test_not_found_locks_session(self) -> None:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
-            patch("cipherden.cli.main.get_entries_by_title", return_value=[]),
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
         ):
             mock_session = _mock_unlocked_session()
             mock_session_cls.unlock.return_value = mock_session
-            runner.invoke(app, ["get", "Nonexistent"], input=f"{_PASSWORD}\n")
+            runner.invoke(app, ["get", "nonexistent-id"], input=f"{_PASSWORD}\n")
         mock_session.lock.assert_called_once()
 
     def test_wrong_master_password_exits_1(self) -> None:
         with patch("cipherden.cli.main.VaultSession") as mock_session_cls:
             mock_session_cls.unlock.side_effect = WrongPasswordError("Incorrect master password.")
-            result = runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
+            result = runner.invoke(app, ["get", _ENTRY.id], input=f"{_PASSWORD}\n")
         assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# list — happy path
+# ---------------------------------------------------------------------------
+
+
+class TestListCommand:
+    def test_successful_list_exits_0(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["list"], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 0
+
+    def test_list_prints_every_entry_without_password(self) -> None:
+        other = _ENTRY.model_copy(
+            update={"id": "22222222-2222-2222-2222-222222222222", "title": "GitLab"}
+        )
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY, other]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["list"], input=f"{_PASSWORD}\n")
+        assert _ENTRY.title in result.output
+        assert other.title in result.output
+        assert _ENTRY.password not in result.output
+
+    def test_list_on_empty_vault_exits_0(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.list_entries", return_value=[]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["list"], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 0
+        assert "empty" in result.output.lower()
+
+    def test_list_locks_session_afterwards(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.list_entries", return_value=[_ENTRY]),
+        ):
+            mock_session = _mock_unlocked_session()
+            mock_session_cls.unlock.return_value = mock_session
+            runner.invoke(app, ["list"], input=f"{_PASSWORD}\n")
+        mock_session.lock.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# search — happy path
+# ---------------------------------------------------------------------------
+
+
+class TestSearchCommand:
+    def test_successful_search_exits_0(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.search_entries", return_value=[_ENTRY]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["search", "git"], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 0
+
+    def test_search_called_with_correct_query(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.search_entries", return_value=[_ENTRY]) as mock_search,
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            runner.invoke(app, ["search", "git"], input=f"{_PASSWORD}\n")
+        assert mock_search.call_args[0][1] == "git"
+
+    def test_search_prints_matches_without_password(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.search_entries", return_value=[_ENTRY]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["search", "git"], input=f"{_PASSWORD}\n")
+        assert _ENTRY.title in result.output
+        assert _ENTRY.password not in result.output
+
+    def test_search_no_matches_exits_0(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.search_entries", return_value=[]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["search", "nope"], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 0
+        assert "no matches" in result.output.lower()
+
+    def test_search_locks_session_afterwards(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.search_entries", return_value=[_ENTRY]),
+        ):
+            mock_session = _mock_unlocked_session()
+            mock_session_cls.unlock.return_value = mock_session
+            runner.invoke(app, ["search", "git"], input=f"{_PASSWORD}\n")
+        mock_session.lock.assert_called_once()

@@ -5,6 +5,7 @@ Tests cover:
 - add_entry returns EntryRead with correct fields
 - get_entry retrieves and decrypts correctly
 - list_entries returns all entries ordered by title
+- search_entries matches title/url substrings case-insensitively
 - update_entry updates only supplied fields and bumps updated_at
 - delete_entry removes the entry
 - Full add/get/list/update/delete lifecycle
@@ -29,6 +30,7 @@ from cipherden.vault.vault import (
     get_entries_by_title,
     get_entry,
     list_entries,
+    search_entries,
     update_entry,
 )
 
@@ -282,6 +284,57 @@ class TestListEntries:
         )
         entries = list_entries(key, vault_path=vault_path)
         assert entries[0].password == "mypassword"  # pragma: allowlist secret
+
+
+# ---------------------------------------------------------------------------
+# search_entries
+# ---------------------------------------------------------------------------
+
+
+class TestSearchEntries:
+    def test_matches_substring_in_title(self, key, vault_path, added_entry) -> None:
+        results = search_entries(key, "Hub", vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
+
+    def test_matches_substring_in_url(self, key, vault_path, added_entry) -> None:
+        results = search_entries(key, "github.com", vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
+
+    def test_match_is_case_insensitive(self, key, vault_path, added_entry) -> None:
+        results = search_entries(key, "HUB", vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
+
+    def test_returns_empty_list_for_no_match(self, key, vault_path, added_entry) -> None:
+        assert search_entries(key, "nonexistent", vault_path=vault_path) == []
+
+    def test_password_decrypts_correctly(self, key, vault_path, added_entry, sample_create) -> None:
+        results = search_entries(key, "Hub", vault_path=vault_path)
+        assert results[0].password == sample_create.password
+
+    def test_entries_without_url_not_matched_on_empty_query_remainder(
+        self, key, vault_path
+    ) -> None:
+        add_entry(
+            key,
+            EntryCreate(title="NoUrl", password="p1"),  # pragma: allowlist secret
+            vault_path=vault_path,
+        )
+        results = search_entries(key, "example", vault_path=vault_path)
+        assert results == []
+
+    def test_results_ordered_by_title(self, key, vault_path) -> None:
+        add_entry(
+            key,
+            EntryCreate(title="Zeta Mail", password="p1"),  # pragma: allowlist secret
+            vault_path=vault_path,
+        )
+        add_entry(
+            key,
+            EntryCreate(title="Alpha Mail", password="p2"),  # pragma: allowlist secret
+            vault_path=vault_path,
+        )
+        results = search_entries(key, "Mail", vault_path=vault_path)
+        assert [e.title for e in results] == ["Alpha Mail", "Zeta Mail"]
 
 
 # ---------------------------------------------------------------------------
