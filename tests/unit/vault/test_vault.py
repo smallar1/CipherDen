@@ -26,6 +26,7 @@ from cipherden.vault.models import EntryCreate, EntryUpdate
 from cipherden.vault.vault import (
     add_entry,
     delete_entry,
+    get_entries_by_title,
     get_entry,
     list_entries,
     update_entry,
@@ -187,6 +188,42 @@ class TestGetEntry:
     def test_raises_not_found_error_for_missing_id(self, key, vault_path) -> None:
         with pytest.raises(NotFoundError):
             get_entry(key, "00000000-0000-0000-0000-000000000000", vault_path=vault_path)
+
+
+# ---------------------------------------------------------------------------
+# get_entries_by_title
+# ---------------------------------------------------------------------------
+
+
+class TestGetEntriesByTitle:
+    def test_returns_matching_entry(self, key, vault_path, added_entry) -> None:
+        results = get_entries_by_title(key, added_entry.title, vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
+
+    def test_match_is_case_insensitive(self, key, vault_path, added_entry) -> None:
+        results = get_entries_by_title(key, added_entry.title.upper(), vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
+
+    def test_returns_empty_list_for_no_match(self, key, vault_path) -> None:
+        assert get_entries_by_title(key, "Nonexistent", vault_path=vault_path) == []
+
+    def test_returns_all_entries_sharing_a_title(self, key, vault_path) -> None:
+        add_entry(
+            key,
+            EntryCreate(title="Shared", username="a", password="p1"),  # pragma: allowlist secret
+            vault_path=vault_path,
+        )
+        add_entry(
+            key,
+            EntryCreate(title="Shared", username="b", password="p2"),  # pragma: allowlist secret
+            vault_path=vault_path,
+        )
+        results = get_entries_by_title(key, "Shared", vault_path=vault_path)
+        assert {e.username for e in results} == {"a", "b"}
+
+    def test_password_decrypts_correctly(self, key, vault_path, added_entry, sample_create) -> None:
+        results = get_entries_by_title(key, added_entry.title, vault_path=vault_path)
+        assert results[0].password == sample_create.password
 
 
 # ---------------------------------------------------------------------------

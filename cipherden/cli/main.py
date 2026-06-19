@@ -4,7 +4,8 @@ main.py — CipherDen CLI entry point.
 Commands:
   cipherden vault init    Initialise a new encrypted vault.
   cipherden add           Add a new credential to the vault.
-  cipherden get           Retrieve a credential by ID.
+  cipherden get all       List every credential in the vault.
+  cipherden get <title>   Retrieve credential(s) matching a title.
 """
 
 from __future__ import annotations
@@ -13,11 +14,10 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 
-from cipherden.exceptions import NotFoundError
 from cipherden.vault.init import VaultAlreadyExistsError, vault_init
-from cipherden.vault.models import EntryCreate
+from cipherden.vault.models import EntryCreate, EntryRead
 from cipherden.vault.session import VaultNotInitialisedError, VaultSession, WrongPasswordError
-from cipherden.vault.vault import add_entry, get_entry
+from cipherden.vault.vault import add_entry, get_entries_by_title, list_entries
 
 app = typer.Typer(
     name="cipherden",
@@ -106,18 +106,7 @@ def cmd_add() -> None:
     console.print(f"ID: {entry.id}")
 
 
-@app.command("get")
-def cmd_get(entry_id: str = typer.Argument(..., help="UUID of the entry to retrieve.")) -> None:
-    """Retrieve a credential by ID."""
-    session = _unlock_or_exit()
-    try:
-        entry = get_entry(session.key, entry_id)
-    except NotFoundError as exc:
-        err_console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
-    finally:
-        session.lock()
-
+def _print_entry(entry: EntryRead) -> None:
     console.print(f"ID: {entry.id}")
     console.print(f"Title: {entry.title}")
     console.print(f"Username: {entry.username}")
@@ -126,3 +115,33 @@ def cmd_get(entry_id: str = typer.Argument(..., help="UUID of the entry to retri
         console.print(f"URL: {entry.url}")
     if entry.notes:
         console.print(f"Notes: {entry.notes}")
+
+
+@app.command("get")
+def cmd_get(
+    identifier: str = typer.Argument(
+        ..., help="Entry title to retrieve, or 'all' to list every entry."
+    ),
+) -> None:
+    """Retrieve a credential by title, or every credential with 'all'."""
+    is_all = identifier.lower() == "all"
+    session = _unlock_or_exit()
+    try:
+        if is_all:
+            entries = list_entries(session.key)
+        else:
+            entries = get_entries_by_title(session.key, identifier)
+    finally:
+        session.lock()
+
+    if not entries:
+        if is_all:
+            console.print("[yellow]Vault is empty.[/yellow]")
+            return
+        err_console.print(f"[red]Error:[/red] No entry found with title '{identifier}'.")
+        raise typer.Exit(code=1)
+
+    for i, entry in enumerate(entries):
+        if i > 0:
+            console.print()
+        _print_entry(entry)
