@@ -124,6 +124,29 @@ def list_entries(
     return [_row_to_entry(row, key) for row in rows]
 
 
+def search_entries(
+    key: bytearray,
+    query: str,
+    vault_path: Path = VAULT_FILE,
+) -> list[EntryRead]:
+    """Return entries whose title or url contains *query* (case-insensitive)."""
+    pattern = f"%{query}%"
+    conn = open_db(vault_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM entries
+            WHERE title LIKE ? COLLATE NOCASE OR url LIKE ? COLLATE NOCASE
+            ORDER BY title COLLATE NOCASE
+            """,
+            (pattern, pattern),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [_row_to_entry(row, key) for row in rows]
+
+
 def update_entry(
     key: bytearray,
     entry_id: str,

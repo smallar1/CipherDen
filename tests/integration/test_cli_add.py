@@ -6,7 +6,8 @@ Drives the real Typer app (no mocking) against a temporary vault file:
   2. `cipherden add` saves a new credential and prints its UUID.
   3. The raw SQLite row is verified directly (password stored encrypted,
      never as plaintext).
-  4. `cipherden get <title>` retrieves the entry and decrypts the password.
+  4. `cipherden get <id>` retrieves the entry and decrypts the password.
+  5. `cipherden list` shows the entry without its password.
 
 The vault/session/CRUD functions all default their `vault_path` argument to
 the module-level VAULT_FILE constant, which is bound at import time. Since
@@ -48,8 +49,9 @@ def tmp_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(init_module.vault_init, "__defaults__", (vault_path,))
     monkeypatch.setattr(session_module.VaultSession.unlock.__func__, "__defaults__", (vault_path,))
     monkeypatch.setattr(vault_module.add_entry, "__defaults__", (vault_path,))
-    monkeypatch.setattr(vault_module.get_entries_by_title, "__defaults__", (vault_path,))
+    monkeypatch.setattr(vault_module.get_entry, "__defaults__", (vault_path,))
     monkeypatch.setattr(vault_module.list_entries, "__defaults__", (vault_path,))
+    monkeypatch.setattr(vault_module.search_entries, "__defaults__", (vault_path,))
     return vault_path
 
 
@@ -76,15 +78,23 @@ class TestCliAddIntegration:
             conn.close()
         assert row is not None
 
-        get_result = runner.invoke(app, ["get", _TITLE], input=f"{_PASSWORD}\n")
+        get_result = runner.invoke(app, ["get", entry_id, "--reveal"], input=f"{_PASSWORD}\n")
         assert get_result.exit_code == 0
         assert _ENTRY_PASSWORD in get_result.output
         assert _TITLE in get_result.output
 
-        get_all_result = runner.invoke(app, ["get", "all"], input=f"{_PASSWORD}\n")
-        assert get_all_result.exit_code == 0
-        assert _ENTRY_PASSWORD in get_all_result.output
-        assert _TITLE in get_all_result.output
+        masked_result = runner.invoke(app, ["get", entry_id], input=f"{_PASSWORD}\n")
+        assert masked_result.exit_code == 0
+        assert _ENTRY_PASSWORD not in masked_result.output
+
+        list_result = runner.invoke(app, ["list"], input=f"{_PASSWORD}\n")
+        assert list_result.exit_code == 0
+        assert _TITLE in list_result.output
+        assert _ENTRY_PASSWORD not in list_result.output
+
+        search_result = runner.invoke(app, ["search", _TITLE], input=f"{_PASSWORD}\n")
+        assert search_result.exit_code == 0
+        assert _TITLE in search_result.output
 
     def test_password_not_stored_as_plaintext_in_raw_db(self, tmp_vault: Path) -> None:
         runner.invoke(app, ["vault", "init"], input=f"{_PASSWORD}\n{_PASSWORD}\n")

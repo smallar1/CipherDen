@@ -2,10 +2,11 @@
 main.py — CipherDen CLI entry point.
 
 Commands:
-  cipherden vault init    Initialise a new encrypted vault.
-  cipherden add           Add a new credential to the vault.
-  cipherden get all       List every credential in the vault.
-  cipherden get <title>   Retrieve credential(s) matching a title.
+  cipherden vault init      Initialise a new encrypted vault.
+  cipherden add             Add a new credential to the vault.
+  cipherden get <id>        Retrieve a credential by ID (password masked unless --reveal).
+  cipherden list            List every credential in the vault.
+  cipherden search <query>  Search credentials by title or URL.
 """
 
 from __future__ import annotations
@@ -13,11 +14,15 @@ from __future__ import annotations
 import typer
 from pydantic import ValidationError
 from rich.console import Console
+from rich.table import Table
 
+from cipherden.exceptions import NotFoundError
 from cipherden.vault.init import VaultAlreadyExistsError, vault_init
 from cipherden.vault.models import EntryCreate, EntryRead
 from cipherden.vault.session import VaultNotInitialisedError, VaultSession, WrongPasswordError
-from cipherden.vault.vault import add_entry, get_entries_by_title, list_entries
+from cipherden.vault.vault import add_entry, get_entry, list_entries, search_entries
+
+_MASKED_PASSWORD = "********"  # noqa: S105
 
 app = typer.Typer(
     name="cipherden",
@@ -106,42 +111,79 @@ def cmd_add() -> None:
     console.print(f"ID: {entry.id}")
 
 
-def _print_entry(entry: EntryRead) -> None:
-    console.print(f"ID: {entry.id}")
-    console.print(f"Title: {entry.title}")
-    console.print(f"Username: {entry.username}")
-    console.print(f"Password: {entry.password}")
+def _print_entry_table(entry: EntryRead, *, reveal: bool) -> None:
+    table = Table(show_header=False)
+    table.add_row("ID", entry.id)
+    table.add_row("Title", entry.title)
+    table.add_row("Username", entry.username)
+    table.add_row("Password", entry.password if reveal else _MASKED_PASSWORD)
     if entry.url:
-        console.print(f"URL: {entry.url}")
+        table.add_row("URL", entry.url)
     if entry.notes:
-        console.print(f"Notes: {entry.notes}")
+        table.add_row("Notes", entry.notes)
+    console.print(table)
+
+
+def _print_entries_table(entries: list[EntryRead]) -> None:
+    table = Table()
+    table.add_column("ID")
+    table.add_column("Title")
+    table.add_column("Username")
+    table.add_column("URL")
+    for entry in entries:
+        table.add_row(entry.id, entry.title, entry.username, entry.url or "")
+    console.print(table)
 
 
 @app.command("get")
 def cmd_get(
-    identifier: str = typer.Argument(
-        ..., help="Entry title to retrieve, or 'all' to list every entry."
+    entry_id: str = typer.Argument(..., help="ID of the entry to retrieve."),
+    reveal: bool = typer.Option(
+        False, "--reveal", help="Show the password in plaintext instead of masking it."
     ),
 ) -> None:
-    """Retrieve a credential by title, or every credential with 'all'."""
-    is_all = identifier.lower() == "all"
+    """Retrieve a credential by ID."""
     session = _unlock_or_exit()
     try:
-        if is_all:
-            entries = list_entries(session.key)
-        else:
-            entries = get_entries_by_title(session.key, identifier)
+        entry = get_entry(session.key, entry_id)
+    except NotFoundError as exc:
+        err_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        session.lock()
+
+    _print_entry_table(entry, reveal=reveal)
+
+
+@app.command("list")
+def cmd_list() -> None:
+    """List every credential in the vault."""
+    session = _unlock_or_exit()
+    try:
+        entries = list_entries(session.key)
     finally:
         session.lock()
 
     if not entries:
-        if is_all:
-            console.print("[yellow]Vault is empty.[/yellow]")
-            return
-        err_console.print(f"[red]Error:[/red] No entry found with title '{identifier}'.")
-        raise typer.Exit(code=1)
+        console.print("[yellow]Vault is empty.[/yellow]")
+        return
 
-    for i, entry in enumerate(entries):
-        if i > 0:
-            console.print()
-        _print_entry(entry)
+    _print_entries_table(entries)
+
+
+@app.command("search")
+def cmd_search(
+    query: str = typer.Argument(..., help="Text to search for in entry titles and URLs."),
+) -> None:
+    """Search credentials by title or URL."""
+    session = _unlock_or_exit()
+    try:
+        entries = search_entries(session.key, query)
+    finally:
+        session.lock()
+
+    if not entries:
+        console.print(f"[yellow]No matches found for '{query}'.[/yellow]")
+        return
+
+    _print_entries_table(entries)
