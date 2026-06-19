@@ -92,6 +92,24 @@ def get_entry(
     return _row_to_entry(row, key)
 
 
+def get_entries_by_title(
+    key: bytearray,
+    title: str,
+    vault_path: Path = VAULT_FILE,
+) -> list[EntryRead]:
+    """Return all entries whose title matches *title* (case-insensitive)."""
+    conn = open_db(vault_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM entries WHERE title = ? COLLATE NOCASE ORDER BY title COLLATE NOCASE",
+            (title,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [_row_to_entry(row, key) for row in rows]
+
+
 def list_entries(
     key: bytearray,
     vault_path: Path = VAULT_FILE,
