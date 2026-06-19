@@ -4,7 +4,7 @@ main.py — CipherDen CLI entry point.
 Commands:
   cipherden vault init      Initialise a new encrypted vault.
   cipherden add             Add a new credential to the vault.
-  cipherden get <id>        Retrieve a credential by ID (password masked unless --reveal).
+  cipherden get <id|title>  Retrieve a credential by ID or title (password masked unless --reveal).
   cipherden list            List every credential in the vault.
   cipherden search <query>  Search credentials by title or URL.
 """
@@ -20,7 +20,13 @@ from cipherden.exceptions import NotFoundError
 from cipherden.vault.init import VaultAlreadyExistsError, vault_init
 from cipherden.vault.models import EntryCreate, EntryRead
 from cipherden.vault.session import VaultNotInitialisedError, VaultSession, WrongPasswordError
-from cipherden.vault.vault import add_entry, get_entry, list_entries, search_entries
+from cipherden.vault.vault import (
+    add_entry,
+    get_entries_by_title,
+    get_entry,
+    list_entries,
+    search_entries,
+)
 
 _MASKED_PASSWORD = "********"  # noqa: S105
 
@@ -137,22 +143,26 @@ def _print_entries_table(entries: list[EntryRead]) -> None:
 
 @app.command("get")
 def cmd_get(
-    entry_id: str = typer.Argument(..., help="ID of the entry to retrieve."),
+    identifier: str = typer.Argument(..., help="ID or title of the entry to retrieve."),
     reveal: bool = typer.Option(
         False, "--reveal", help="Show the password in plaintext instead of masking it."
     ),
 ) -> None:
-    """Retrieve a credential by ID."""
+    """Retrieve a credential by ID or title."""
     session = _unlock_or_exit()
     try:
-        entry = get_entry(session.key, entry_id)
-    except NotFoundError as exc:
-        err_console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
+        try:
+            entries = [get_entry(session.key, identifier)]
+        except NotFoundError:
+            entries = get_entries_by_title(session.key, identifier)
+            if not entries:
+                err_console.print(f"[red]Error:[/red] Entry '{identifier}' not found.")
+                raise typer.Exit(code=1) from None
     finally:
         session.lock()
 
-    _print_entry_table(entry, reveal=reveal)
+    for entry in entries:
+        _print_entry_table(entry, reveal=reveal)
 
 
 @app.command("list")

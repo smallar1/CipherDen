@@ -3,8 +3,8 @@ tests/unit/cli/test_main.py — Unit tests for the CLI vault init, add, get, lis
 search commands.
 
 Uses Typer's CliRunner to invoke commands in-process.
-vault_init / add_entry / get_entry / list_entries / search_entries / VaultSession are
-mocked to isolate CLI logic from vault logic.
+vault_init / add_entry / get_entry / get_entries_by_title / list_entries / search_entries /
+VaultSession are mocked to isolate CLI logic from vault logic.
 """
 
 from __future__ import annotations
@@ -315,6 +315,7 @@ class TestGetCommandErrors:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
             patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch("cipherden.cli.main.get_entries_by_title", return_value=[]),
         ):
             mock_session_cls.unlock.return_value = _mock_unlocked_session()
             result = runner.invoke(app, ["get", "nonexistent-id"], input=f"{_PASSWORD}\n")
@@ -324,6 +325,7 @@ class TestGetCommandErrors:
         with (
             patch("cipherden.cli.main.VaultSession") as mock_session_cls,
             patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch("cipherden.cli.main.get_entries_by_title", return_value=[]),
         ):
             mock_session = _mock_unlocked_session()
             mock_session_cls.unlock.return_value = mock_session
@@ -335,6 +337,75 @@ class TestGetCommandErrors:
             mock_session_cls.unlock.side_effect = WrongPasswordError("Incorrect master password.")
             result = runner.invoke(app, ["get", _ENTRY.id], input=f"{_PASSWORD}\n")
         assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# get — title fallback
+# ---------------------------------------------------------------------------
+
+
+class TestGetByTitleFallback:
+    def test_title_lookup_used_when_id_lookup_fails(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch(
+                "cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]
+            ) as mock_get_by_title,
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 0
+        assert mock_get_by_title.call_args[0][1] == _ENTRY.title
+        assert _ENTRY.title in result.output
+
+    def test_multiple_title_matches_all_printed(self) -> None:
+        other = _ENTRY.model_copy(
+            update={"id": "22222222-2222-2222-2222-222222222222", "username": "other@example.com"}
+        )
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY, other]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 0
+        assert result.output.count(_ENTRY.title) == 2
+        assert _ENTRY.username in result.output
+        assert other.username in result.output
+
+    def test_reveal_applies_to_title_matches(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["get", _ENTRY.title, "--reveal"], input=f"{_PASSWORD}\n")
+        assert _ENTRY.password in result.output
+
+    def test_not_found_by_either_exits_1(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch("cipherden.cli.main.get_entries_by_title", return_value=[]),
+        ):
+            mock_session_cls.unlock.return_value = _mock_unlocked_session()
+            result = runner.invoke(app, ["get", "nonexistent"], input=f"{_PASSWORD}\n")
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_locks_session_on_title_fallback(self) -> None:
+        with (
+            patch("cipherden.cli.main.VaultSession") as mock_session_cls,
+            patch("cipherden.cli.main.get_entry", side_effect=NotFoundError("not found")),
+            patch("cipherden.cli.main.get_entries_by_title", return_value=[_ENTRY]),
+        ):
+            mock_session = _mock_unlocked_session()
+            mock_session_cls.unlock.return_value = mock_session
+            runner.invoke(app, ["get", _ENTRY.title], input=f"{_PASSWORD}\n")
+        mock_session.lock.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
