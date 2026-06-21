@@ -71,3 +71,4 @@ Integration tests drive the real Typer CLI via `typer.testing.CliRunner` with no
 - **Encryption format**: `nonce (12 bytes) || ciphertext+tag`. AAD must match exactly between encrypt and decrypt calls or authentication fails.
 - **Branch workflow**: all work happens on `KC-NNN` feature branches off `main`. PRs reference the Jira ticket (`KC-NNN`).
 - **Commit messages**: short and descriptive; reference the ticket where relevant (e.g. `fix: correct nonce handling — KC-003`). No `Co-Authored-By` trailers.
+- **Pull requests**: use the template at `.github/pull_request_template.md`. Every PR needs a description (what and why), and all checklist items must be addressed before merge — tests, docs, security implications, ADR if an architectural decision was made, no secrets committed.
