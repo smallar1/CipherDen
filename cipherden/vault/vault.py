@@ -97,12 +97,13 @@ def get_entries_by_title(
     title: str,
     vault_path: Path = VAULT_FILE,
 ) -> list[EntryRead]:
-    """Return all entries whose title matches *title* (case-insensitive)."""
+    """Return all entries whose title contains *title* (case-insensitive, partial match)."""
+    pattern = f"%{title}%"
     conn = open_db(vault_path)
     try:
         rows = conn.execute(
-            "SELECT * FROM entries WHERE title = ? COLLATE NOCASE ORDER BY title COLLATE NOCASE",
-            (title,),
+            "SELECT * FROM entries WHERE title LIKE ? COLLATE NOCASE ORDER BY title COLLATE NOCASE",
+            (pattern,),
         ).fetchall()
     finally:
         conn.close()
