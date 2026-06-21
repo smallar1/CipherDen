@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 import cipherden.backend.app as app_module
 import cipherden.vault.init as init_module
 import cipherden.vault.session as session_module
+import cipherden.vault.vault as vault_module
 from cipherden.backend.app import app
 from cipherden.backend.session_store import SessionStore
 from cipherden.cli.main import app as cli_app
@@ -27,9 +28,13 @@ def reset_store(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def initialised_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Create a real vault in tmp_path and redirect unlock to it."""
+    """Create a real vault in tmp_path and redirect all vault functions to it."""
     vault_path = tmp_path / "cipherden.db"
     monkeypatch.setattr(init_module.vault_init, "__defaults__", (vault_path,))
     monkeypatch.setattr(session_module.VaultSession.unlock.__func__, "__defaults__", (vault_path,))
+    monkeypatch.setattr(vault_module.add_entry, "__defaults__", (vault_path,))
+    monkeypatch.setattr(vault_module.get_entry, "__defaults__", (vault_path,))
+    monkeypatch.setattr(vault_module.list_entries, "__defaults__", (vault_path,))
+    monkeypatch.setattr(vault_module.search_entries, "__defaults__", (vault_path,))
     cli_runner.invoke(cli_app, ["vault", "init"], input=f"{_PASSWORD}\n{_PASSWORD}\n")
     return vault_path
