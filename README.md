@@ -28,8 +28,8 @@ A startup script and a macOS launchd service file will be provided so the backen
 
 | Component | Status |
 |-----------|--------|
-| Vault core + cryptography | In progress |
-| CLI | Planned |
+| Vault core + cryptography | Done |
+| CLI | Done |
 | FastAPI backend | Planned |
 | React web UI | Planned |
 | Browser extension (MV3) | Planned |
@@ -44,7 +44,27 @@ A startup script and a macOS launchd service file will be provided so the backen
 
 ## Getting started
 
-Documentation and installation instructions will be added as each component reaches a stable state. Check back once the vault core and CLI are complete.
+The vault core and CLI are stable enough to use locally. Requires Python 3.14.5 or later.
+
+```bash
+git clone https://github.com/smallar1/CipherDen.git
+cd CipherDen
+pip install -e .
+```
+
+Initialise a vault, then manage credentials from the terminal:
+
+```bash
+cipherden vault init           # set a master password
+cipherden add                  # add a credential
+cipherden get <id|title>       # retrieve a credential (password masked unless --reveal)
+cipherden list                 # list every credential
+cipherden search <query>       # search by title or URL
+cipherden delete <id>          # delete a credential (with confirmation)
+cipherden generate --length 20 # generate a random password
+```
+
+Installation instructions for the web UI and browser extension will be added once those components are stable.
 
 ## Security
 
