@@ -16,15 +16,23 @@ class SessionStore:
         return token
 
     def get(self, token: str) -> VaultSession | None:
+        found: VaultSession | None = None
         for stored_token, session in self._sessions.items():
             if hmac.compare_digest(stored_token, token):
-                return session
-        return None
+                found = session
+        # No early exit — always iterate all tokens to avoid leaking
+        # whether a prefix matched via timing.
+        return found
 
     def revoke(self, token: str) -> bool:
-        session = self._sessions.pop(token, None)
-        if session is None:
+        matched_key = None
+        for stored_token in self._sessions:
+            if hmac.compare_digest(stored_token, token):
+                matched_key = stored_token
+                break
+        if matched_key is None:
             return False
+        session = self._sessions.pop(matched_key)
         if not session.is_locked:
             session.lock()
         return True
