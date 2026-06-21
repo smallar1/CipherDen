@@ -28,7 +28,11 @@ def get_session(
 ) -> VaultSession:
     session = store.get(credentials.credentials)
     if session is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired session token.")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired session token.",
+            headers={"WWW-Authenticate": 'Bearer realm="CipherDen"'},
+        )
     return session
 
 

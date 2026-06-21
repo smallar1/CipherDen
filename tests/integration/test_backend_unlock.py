@@ -74,7 +74,8 @@ class TestLock:
 
     def test_revoked_token_is_rejected_with_401(self, initialised_vault: Path) -> None:
         token = client.post("/unlock", json={"master_password": _PASSWORD}).json()["token"]
-        client.post("/lock", headers={"Authorization": f"Bearer {token}"})
+        first_response = client.post("/lock", headers={"Authorization": f"Bearer {token}"})
+        assert first_response.status_code == 204
         # Second lock attempt with the same token must be rejected
         response = client.post("/lock", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 401
