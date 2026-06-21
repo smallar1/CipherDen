@@ -95,4 +95,4 @@ extension/build/
 *.key
 *.cert
 *.p12
-Thumbs.db
+Thumbs.dbdocs/superpowers/
