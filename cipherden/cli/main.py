@@ -7,6 +7,8 @@ Commands:
   cipherden get <id|title>  Retrieve a credential by ID or title (password masked unless --reveal).
   cipherden list            List every credential in the vault.
   cipherden search <query>  Search credentials by title or URL.
+  cipherden delete <id>     Delete a credential by ID (with confirmation).
+  cipherden generate        Generate a strong random password.
 """
 
 from __future__ import annotations
@@ -17,11 +19,13 @@ from rich.console import Console
 from rich.table import Table
 
 from cipherden.exceptions import NotFoundError
+from cipherden.vault.generator import DEFAULT_LENGTH, generate_password
 from cipherden.vault.init import VaultAlreadyExistsError, vault_init
 from cipherden.vault.models import EntryCreate, EntryRead
 from cipherden.vault.session import VaultNotInitialisedError, VaultSession, WrongPasswordError
 from cipherden.vault.vault import (
     add_entry,
+    delete_entry,
     get_entries_by_title,
     get_entry,
     list_entries,
@@ -199,3 +203,44 @@ def cmd_search(
         return
 
     _print_entries_table(entries)
+
+
+@app.command("delete")
+def cmd_delete(
+    entry_id: str = typer.Argument(..., help="ID of the entry to delete."),
+) -> None:
+    """Delete a credential from the vault."""
+    confirmed = typer.confirm(f"Delete entry '{entry_id}'? This cannot be undone.")
+    if not confirmed:
+        console.print("[yellow]Aborted.[/yellow]")
+        return
+
+    try:
+        delete_entry(entry_id)
+    except NotFoundError as exc:
+        err_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print("[green]Entry deleted.[/green]")
+
+
+@app.command("generate")
+def cmd_generate(
+    length: int = typer.Option(
+        DEFAULT_LENGTH, "--length", "-l", help="Length of the generated password."
+    ),
+    symbols: bool = typer.Option(
+        True, "--symbols/--no-symbols", help="Include symbols in the generated password."
+    ),
+    numbers: bool = typer.Option(
+        True, "--numbers/--no-numbers", help="Include numbers in the generated password."
+    ),
+) -> None:
+    """Generate a strong random password."""
+    try:
+        password = generate_password(length=length, use_symbols=symbols, use_numbers=numbers)
+    except ValueError as exc:
+        err_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(password)

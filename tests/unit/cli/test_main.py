@@ -1,10 +1,11 @@
 """
-tests/unit/cli/test_main.py — Unit tests for the CLI vault init, add, get, list, and
-search commands.
+tests/unit/cli/test_main.py — Unit tests for the CLI vault init, add, get, list,
+search, delete, and generate commands.
 
 Uses Typer's CliRunner to invoke commands in-process.
 vault_init / add_entry / get_entry / get_entries_by_title / list_entries / search_entries /
-VaultSession are mocked to isolate CLI logic from vault logic.
+delete_entry / generate_password / VaultSession are mocked to isolate CLI logic from
+vault logic.
 """
 
 from __future__ import annotations
@@ -511,3 +512,84 @@ class TestSearchCommand:
             mock_session_cls.unlock.return_value = mock_session
             runner.invoke(app, ["search", "git"], input=f"{_PASSWORD}\n")
         mock_session.lock.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# delete — happy path
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteCommand:
+    def test_confirmed_delete_exits_0(self) -> None:
+        with patch("cipherden.cli.main.delete_entry") as mock_delete:
+            result = runner.invoke(app, ["delete", _ENTRY.id], input="y\n")
+        assert result.exit_code == 0
+        mock_delete.assert_called_once_with(_ENTRY.id)
+
+    def test_confirmed_delete_prints_success_message(self) -> None:
+        with patch("cipherden.cli.main.delete_entry"):
+            result = runner.invoke(app, ["delete", _ENTRY.id], input="y\n")
+        assert "deleted" in result.output.lower()
+
+    def test_declined_confirmation_does_not_delete(self) -> None:
+        with patch("cipherden.cli.main.delete_entry") as mock_delete:
+            result = runner.invoke(app, ["delete", _ENTRY.id], input="n\n")
+        assert result.exit_code == 0
+        mock_delete.assert_not_called()
+        assert "aborted" in result.output.lower()
+
+    def test_delete_nonexistent_id_exits_1(self) -> None:
+        with patch("cipherden.cli.main.delete_entry", side_effect=NotFoundError("not found")):
+            result = runner.invoke(app, ["delete", "nonexistent-id"], input="y\n")
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# generate — happy path
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateCommand:
+    def test_default_generate_exits_0(self) -> None:
+        with patch(
+            "cipherden.cli.main.generate_password", return_value="aB3$xyz9Qw2!mnop"
+        ) as mock_gen:
+            result = runner.invoke(app, ["generate"])
+        assert result.exit_code == 0
+        mock_gen.assert_called_once_with(length=16, use_symbols=True, use_numbers=True)
+
+    def test_generate_prints_password(self) -> None:
+        with patch("cipherden.cli.main.generate_password", return_value="aB3$xyz9Qw2!mnop"):
+            result = runner.invoke(app, ["generate"])
+        assert "aB3$xyz9Qw2!mnop" in result.output
+
+    def test_generate_with_length_option(self) -> None:
+        with patch("cipherden.cli.main.generate_password", return_value="x" * 32) as mock_gen:
+            result = runner.invoke(app, ["generate", "--length", "32"])
+        assert result.exit_code == 0
+        mock_gen.assert_called_once_with(length=32, use_symbols=True, use_numbers=True)
+
+    def test_generate_no_symbols_flag(self) -> None:
+        with patch(
+            "cipherden.cli.main.generate_password", return_value="aB3xyz9Qw2mnop12"
+        ) as mock_gen:
+            result = runner.invoke(app, ["generate", "--no-symbols"])
+        assert result.exit_code == 0
+        mock_gen.assert_called_once_with(length=16, use_symbols=False, use_numbers=True)
+
+    def test_generate_no_numbers_flag(self) -> None:
+        with patch(
+            "cipherden.cli.main.generate_password", return_value="aBxyzQwmnopABCDe"
+        ) as mock_gen:
+            result = runner.invoke(app, ["generate", "--no-numbers"])
+        assert result.exit_code == 0
+        mock_gen.assert_called_once_with(length=16, use_symbols=True, use_numbers=False)
+
+    def test_generate_invalid_length_exits_1(self) -> None:
+        with patch(
+            "cipherden.cli.main.generate_password",
+            side_effect=ValueError("Password length must be..."),
+        ):
+            result = runner.invoke(app, ["generate", "--length", "1"])
+        assert result.exit_code == 1
