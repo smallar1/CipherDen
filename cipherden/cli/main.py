@@ -143,7 +143,9 @@ def _print_entries_table(entries: list[EntryRead]) -> None:
 
 @app.command("get")
 def cmd_get(
-    identifier: str = typer.Argument(..., help="ID or title of the entry to retrieve."),
+    identifier: str = typer.Argument(
+        ..., help="ID or title (partial match, case-insensitive) of the entry to retrieve."
+    ),
     reveal: bool = typer.Option(
         False, "--reveal", help="Show the password in plaintext instead of masking it."
     ),

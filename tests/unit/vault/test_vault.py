@@ -4,6 +4,7 @@ tests/unit/vault/test_vault.py — Unit tests for vault CRUD operations.
 Tests cover:
 - add_entry returns EntryRead with correct fields
 - get_entry retrieves and decrypts correctly
+- get_entries_by_title matches title substrings case-insensitively
 - list_entries returns all entries ordered by title
 - search_entries matches title/url substrings case-insensitively
 - update_entry updates only supplied fields and bumps updated_at
@@ -208,6 +209,16 @@ class TestGetEntriesByTitle:
 
     def test_returns_empty_list_for_no_match(self, key, vault_path) -> None:
         assert get_entries_by_title(key, "Nonexistent", vault_path=vault_path) == []
+
+    def test_match_is_partial_substring(self, key, vault_path, added_entry) -> None:
+        substring = added_entry.title[1:-1]
+        results = get_entries_by_title(key, substring, vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
+
+    def test_partial_match_is_case_insensitive(self, key, vault_path, added_entry) -> None:
+        substring = added_entry.title[1:-1].upper()
+        results = get_entries_by_title(key, substring, vault_path=vault_path)
+        assert [e.id for e in results] == [added_entry.id]
 
     def test_returns_all_entries_sharing_a_title(self, key, vault_path) -> None:
         add_entry(
