@@ -89,3 +89,11 @@ class TestLock:
         # As of FastAPI 0.136+, both missing credentials and invalid credentials return 401.
         response = client.post("/lock")
         assert response.status_code == 401
+
+    def test_lifespan_zeroes_sessions_on_shutdown(self, initialised_vault: Path) -> None:
+        with TestClient(app, raise_server_exceptions=True) as c:
+            token = c.post("/unlock", json={"master_password": _PASSWORD}).json()["token"]
+            session = app_module.store.get(token)
+        # Lifespan exited — revoke_all() should have locked every session
+        assert session is not None
+        assert session.is_locked
