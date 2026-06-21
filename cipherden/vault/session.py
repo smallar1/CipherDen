@@ -83,6 +83,7 @@ class VaultSession:
         finally:
             conn.close()
 
+        # open_db creates file if absent; VaultNotInitialisedError relies on no vault_config row.
         if row is None:
             raise VaultNotInitialisedError(
                 f"No vault found at {vault_path}. Run 'cipherden vault init' first."

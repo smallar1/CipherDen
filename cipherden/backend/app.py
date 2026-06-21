@@ -30,6 +30,10 @@ def unlock(body: UnlockRequest) -> UnlockResponse:
             detail="Vault not initialised. Run 'cipherden vault init' first.",
         ) from None
     except WrongPasswordError:
-        raise HTTPException(status_code=401, detail="Incorrect master password.") from None
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect master password.",
+            headers={"WWW-Authenticate": 'Bearer realm="CipherDen"'},
+        ) from None
     token = store.create(session)
     return UnlockResponse(token=token)
