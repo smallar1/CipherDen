@@ -147,7 +147,7 @@ The `SessionStore` is reset between tests by monkeypatching `app_module.store` w
 | `POST /unlock` vault not initialised | `400` |
 | `POST /lock` with valid token | `204` |
 | Same token used after `POST /lock` | `401` (auth dep rejects revoked token) |
-| `POST /lock` with no `Authorization` header | `401` (auth dep rejects missing token) |
+| `POST /lock` with no `Authorization` header | `403` (FastAPI `HTTPBearer` returns 403 for absent header; 401 is for invalid credentials) |
 | `POST /lock` with malformed/invalid token | `401` (auth dep rejects unknown token) |
 
 ---
