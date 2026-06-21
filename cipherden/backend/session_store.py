@@ -29,7 +29,7 @@ class SessionStore:
         for stored_token in self._sessions:
             if hmac.compare_digest(stored_token, token):
                 matched_key = stored_token
-                break
+        # No early exit — always scan all tokens to avoid timing leaks.
         if matched_key is None:
             return False
         session = self._sessions.pop(matched_key)
