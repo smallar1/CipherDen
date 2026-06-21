@@ -30,6 +30,7 @@ dependencies = [
 
 [project.scripts]
 cipherden = "cipherden.cli.main:app"
+cipherden-server = "cipherden.backend.server:main"
 
 [project.optional-dependencies]
 dev = [
