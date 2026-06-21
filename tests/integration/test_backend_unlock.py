@@ -38,3 +38,29 @@ def initialised_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(vault_module.search_entries, "__defaults__", (vault_path,))
     cli_runner.invoke(cli_app, ["vault", "init"], input=f"{_PASSWORD}\n{_PASSWORD}\n")
     return vault_path
+
+
+class TestUnlock:
+    def test_correct_password_returns_200_with_token(self, initialised_vault: Path) -> None:
+        response = client.post("/unlock", json={"master_password": _PASSWORD})
+        assert response.status_code == 200
+        body = response.json()
+        assert "token" in body
+        assert isinstance(body["token"], str)
+        assert len(body["token"]) > 0
+
+    def test_wrong_password_returns_401(self, initialised_vault: Path) -> None:
+        response = client.post("/unlock", json={"master_password": "wrong-password-here"})
+        assert response.status_code == 401
+        assert "Incorrect master password" in response.json()["detail"]
+
+    def test_vault_not_initialised_returns_400(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        vault_path = tmp_path / "nonexistent.db"
+        monkeypatch.setattr(
+            session_module.VaultSession.unlock.__func__, "__defaults__", (vault_path,)
+        )
+        response = client.post("/unlock", json={"master_password": _PASSWORD})
+        assert response.status_code == 400
+        assert "Vault not initialised" in response.json()["detail"]
