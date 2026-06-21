@@ -22,7 +22,29 @@ Out of scope for now:
 
 ## Development setup
 
-Documentation and setup instructions will be added once the vault core and CLI are stable. Check back after Sprint 1.
+The vault core and CLI are stable. Requires Python 3.14.5 or later.
+
+```bash
+git clone https://github.com/smallar1/CipherDen.git
+cd CipherDen
+pip install -e ".[dev]"
+pre-commit install
+```
+
+Run the test suite:
+
+```bash
+pytest
+```
+
+Run lint and formatting checks:
+
+```bash
+ruff check .
+ruff format --check .
+```
+
+Setup instructions for the backend API, web UI, and browser extension will be added as each of those components becomes stable.
 
 ## Pull requests
 
