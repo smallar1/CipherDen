@@ -66,4 +66,18 @@ describe('AddEntryModal', () => {
 
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('shows error and does not call createEntry when token is null', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(client, 'createEntry')
+    renderModal(null)
+
+    await user.type(screen.getByLabelText('Title'), 'Example Site')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'You must be unlocked to save an entry.',
+    )
+    expect(spy).not.toHaveBeenCalled()
+  })
 })
