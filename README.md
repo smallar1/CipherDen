@@ -30,15 +30,15 @@ A startup script and a macOS launchd service file will be provided so the backen
 |-----------|--------|
 | Vault core + cryptography | Done |
 | CLI | Done |
-| FastAPI backend | Planned |
-| React web UI | Planned |
+| FastAPI backend | In progress |
+| React web UI | In progress |
 | Browser extension (MV3) | Planned |
 
 ## Tech stack
 
 - **Vault / CLI** — Python, SQLite, `cryptography`, `argon2-cffi`, Typer, Rich
 - **Backend** — FastAPI, Pydantic, uvicorn
-- **Web UI** — React, TypeScript, Vite, Tailwind CSS, Zustand
+- **Web UI** — React, TypeScript, Vite (styling and state-management libraries not yet adopted — current pages are intentionally unstyled stand-ins)
 - **Browser extension** — TypeScript, Chrome Manifest V3
 - **Platform** — macOS (Linux and Windows support planned)
 
