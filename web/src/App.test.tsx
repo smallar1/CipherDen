@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import App from './App'
 
 describe('App', () => {
-  it('renders the CipherDen heading', () => {
+  it('redirects to the unlock screen when there is no token', () => {
     render(<App />)
-    expect(screen.getByText('CipherDen')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Unlock CipherDen' })).toBeInTheDocument()
   })
 })
