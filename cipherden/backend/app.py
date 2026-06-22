@@ -9,7 +9,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from cipherden.backend.models import GenerateResponse, UnlockRequest, UnlockResponse
 from cipherden.backend.session_store import SessionStore
 from cipherden.vault.generator import generate_password
+from cipherden.vault.models import EntryCreate, EntryRead
 from cipherden.vault.session import VaultNotInitialisedError, VaultSession, WrongPasswordError
+from cipherden.vault.vault import add_entry
 
 store = SessionStore()
 _bearer = HTTPBearer()
@@ -43,6 +45,14 @@ def get_session(
             headers={"WWW-Authenticate": 'Bearer realm="CipherDen"'},
         )
     return session
+
+
+@app.post("/entries", response_model=EntryRead, status_code=201)
+def create_entry(
+    body: EntryCreate,
+    session: Annotated[VaultSession, Depends(get_session)],
+) -> EntryRead:
+    return add_entry(session.key, body)
 
 
 @app.post("/unlock", response_model=UnlockResponse)
