@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { createEntry } from '../api/client'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 
 interface AddEntryModalProps {
   initialPassword: string

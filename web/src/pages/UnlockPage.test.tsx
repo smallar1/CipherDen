@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as client from '../api/client'
-import { AuthContext } from '../auth/AuthContext'
+import { AuthContext } from '../auth/AuthProvider'
 import { UnlockPage } from './UnlockPage'
 
 function renderUnlockPage(setToken = vi.fn()) {

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as client from '../api/client'
-import { AuthContext } from '../auth/AuthContext'
+import { AuthContext } from '../auth/AuthProvider'
 import { AddEntryModal } from './AddEntryModal'
 
 const TEST_PASSWORD = 'xK9!mPq2vT@nL8wZ' // pragma: allowlist secret

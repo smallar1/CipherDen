@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as client from '../api/client'
-import { AuthContext } from '../auth/AuthContext'
+import { AuthContext } from '../auth/AuthProvider'
 import { GeneratorPage } from './GeneratorPage'
 
 function renderGeneratorPage() {
