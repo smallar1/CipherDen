@@ -6,8 +6,9 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from cipherden.backend.models import UnlockRequest, UnlockResponse
+from cipherden.backend.models import GenerateResponse, UnlockRequest, UnlockResponse
 from cipherden.backend.session_store import SessionStore
+from cipherden.vault.generator import generate_password
 from cipherden.vault.session import VaultNotInitialisedError, VaultSession, WrongPasswordError
 
 store = SessionStore()
@@ -21,6 +22,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CipherDen", lifespan=lifespan)
+
+
+@app.get("/generate", response_model=GenerateResponse)
+def generate(
+    length: int = 16, use_symbols: bool = True, use_numbers: bool = True
+) -> GenerateResponse:
+    clamped_length = max(8, min(128, length))
+    return GenerateResponse(password=generate_password(clamped_length, use_symbols, use_numbers))
 
 
 def get_session(

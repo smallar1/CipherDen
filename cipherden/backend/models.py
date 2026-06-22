@@ -13,3 +13,7 @@ class UnlockRequest(BaseModel):
 
 class UnlockResponse(BaseModel):
     token: str
+
+
+class GenerateResponse(BaseModel):
+    password: str
