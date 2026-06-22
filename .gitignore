@@ -95,4 +95,8 @@ extension/build/
 *.key
 *.cert
 *.p12
-Thumbs.dbdocs/superpowers/
+Thumbs.db
+docs/superpowers/
+
+# Visual companion mockups (brainstorming skill)
+.superpowers/

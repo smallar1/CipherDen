@@ -80,6 +80,16 @@ Specific implementation rules:
 
 ---
 
+## Addendum: Web UI (2026-06-21)
+
+The same principle governs the React web UI (`web/`), introduced in SCRUM-19/KC-013. The mechanism is simpler than the browser extension's, since there is no service-worker lifecycle to contend with:
+
+- The session token returned by `POST /unlock` is held in a single `useState` inside a React Context (`web/src/auth/AuthProvider.tsx`), never written to `localStorage`, `sessionStorage`, or any other persistence layer.
+- A page refresh re-initialises React state from scratch, so the token is lost and the user is routed back to the unlock screen (`web/src/auth/ProtectedRoute.tsx`) — re-unlock is required, by design, exactly as for the extension.
+- No idle-timeout auto-lock exists yet for the web UI; full unlock-screen behavior (idle timeout, validation, polish) is deferred to SCRUM-17.
+
+This is a narrower case of the same decision above, not a deviation from it: in-memory only, no disk write, UX cost of re-unlock accepted deliberately.
+
 ## References
 
 - [Chrome Extensions — chrome.storage.session](https://developer.chrome.com/docs/extensions/reference/api/storage#property-session)
